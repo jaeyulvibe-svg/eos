@@ -1,4 +1,7 @@
 {
   "outputDirectory": "dist",
-  "cleanUrls": true
+  "cleanUrls": true,
+  "functions": {
+    "api/notices.js": { "maxDuration": 30 }
+  }
 }
