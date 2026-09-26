@@ -15,13 +15,13 @@ const strip = value => value
   .trim();
 
 async function getJson(url) {
-  const response = await fetch(url, { headers: { 'user-agent': 'OpsWatch/1.0' } });
+  const response = await fetch(url, { headers: { 'user-agent': 'OpsWatch/1.0' }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`${response.status} ${url}`);
   return response.json();
 }
 
 async function getText(url) {
-  const response = await fetch(url, { headers: { 'user-agent': 'OpsWatch/1.0' } });
+  const response = await fetch(url, { headers: { 'user-agent': 'OpsWatch/1.0' }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`${response.status} ${url}`);
   return response.text();
 }
@@ -120,6 +120,7 @@ function tmaxNotices(html) {
 }
 
 module.exports = async function handler(request, response) {
+  response.setHeader('Access-Control-Allow-Origin', '*');
   response.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=3600');
   try {
     const tasks = await Promise.allSettled([
