@@ -42,9 +42,27 @@ create table if not exists public.sync_logs (
   checked_at timestamptz not null default now()
 );
 
+create table if not exists public.tracking_targets (
+  id uuid primary key default gen_random_uuid(),
+  solution_name text not null,
+  installed_version text not null,
+  target_patch_version text,
+  lifecycle_slug text,
+  lifecycle_url text,
+  security_url text,
+  eos_date date,
+  latest_version text,
+  last_checked_at timestamptz,
+  active boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(solution_name, installed_version)
+);
+
 alter table public.assets enable row level security;
 alter table public.vulnerabilities enable row level security;
 alter table public.sync_logs enable row level security;
+alter table public.tracking_targets enable row level security;
 
 create policy "authenticated users manage assets" on public.assets
   for all to authenticated using (true) with check (true);
@@ -52,6 +70,8 @@ create policy "authenticated users manage vulnerabilities" on public.vulnerabili
   for all to authenticated using (true) with check (true);
 create policy "authenticated users read sync logs" on public.sync_logs
   for select to authenticated using (true);
+create policy "authenticated users manage tracking targets" on public.tracking_targets
+  for all to authenticated using (true) with check (true);
 
 create or replace function public.set_updated_at()
 returns trigger language plpgsql as $$
@@ -63,4 +83,8 @@ $$;
 
 drop trigger if exists assets_set_updated_at on public.assets;
 create trigger assets_set_updated_at before update on public.assets
+for each row execute function public.set_updated_at();
+
+drop trigger if exists tracking_targets_set_updated_at on public.tracking_targets;
+create trigger tracking_targets_set_updated_at before update on public.tracking_targets
 for each row execute function public.set_updated_at();
