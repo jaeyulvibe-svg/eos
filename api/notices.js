@@ -39,6 +39,7 @@ function lifecycleNotices(product, label, releases, allowedVersions) {
     summary: `최신 패치 ${release.latest?.name || '미확인'} · EOS ${release.eolFrom || '미정'}`,
     detail: `${label} ${release.name} 버전의 최신 패치는 ${release.latest?.name || '미확인'}이며 지원 종료일은 ${release.eolFrom || '아직 발표되지 않음'}입니다. 운영 중인 설치 버전과 최신 패치를 비교하고, 지원 종료 전 상위 버전 전환·호환성 검증·운영 반영 일정을 수립하세요.`,
     publishedAt: release.eolFrom || release.latest?.date || null,
+    eosDate: release.eolFrom || null,
     fixedVersion: release.latest?.name || null,
     url: `https://endoflife.date/${product}`,
     source: 'endoflife.date',
