@@ -18,8 +18,11 @@ create table if not exists public.notice_actions (
   acknowledged_at timestamptz not null default now(),
   plan_start_date date,
   plan_end_date date,
+  assignee_name text,
+  reviewer_name text,
+  approver_name text,
   next_action_date date not null,
-  action_status text not null default '검토 필요' check (action_status in ('검토 필요','계획 수립','대응 중','완료')),
+  action_status text not null default '인지' check (action_status in ('인지','영향 분석','계획 승인','작업','검증','완료')),
   updated_at timestamptz not null default now()
 );
 
@@ -46,6 +49,9 @@ for each row execute function public.set_updated_at();
 
 alter table public.notice_actions add column if not exists plan_start_date date;
 alter table public.notice_actions add column if not exists plan_end_date date;
+alter table public.notice_actions add column if not exists assignee_name text;
+alter table public.notice_actions add column if not exists reviewer_name text;
+alter table public.notice_actions add column if not exists approver_name text;
 update public.notice_actions
 set plan_start_date = coalesce(plan_start_date, acknowledged_at::date),
     plan_end_date = coalesce(plan_end_date, next_action_date)

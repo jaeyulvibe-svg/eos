@@ -130,15 +130,17 @@ module.exports = async function handler(request, response) {
   response.setHeader('Access-Control-Allow-Origin', '*');
   response.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=3600');
   try {
-    const tasks = await Promise.allSettled([
-      getJson('https://endoflife.date/api/v1/products/tomcat/'),
-      getJson('https://endoflife.date/api/v1/products/postgresql/'),
-      getText('https://tomcat.apache.org/security-9.html'),
-      getText('https://tomcat.apache.org/security-10.html'),
-      getText('https://tomcat.apache.org/security-11.html'),
-      getText(SOURCES.postgres),
-      getText(SOURCES.tmax),
-    ]);
+    const taskDefs = [
+      ['endoflife.date · Tomcat EOS', () => getJson('https://endoflife.date/api/v1/products/tomcat/')],
+      ['endoflife.date · PostgreSQL EOS', () => getJson('https://endoflife.date/api/v1/products/postgresql/')],
+      ['Apache Tomcat 9 Security', () => getText('https://tomcat.apache.org/security-9.html')],
+      ['Apache Tomcat 10 Security', () => getText('https://tomcat.apache.org/security-10.html')],
+      ['Apache Tomcat 11 Security', () => getText('https://tomcat.apache.org/security-11.html')],
+      ['PostgreSQL Security', () => getText(SOURCES.postgres)],
+      ['TmaxSoft JEUS·WebtoB', () => getText(SOURCES.tmax)],
+    ];
+    const startedAt = Date.now();
+    const tasks = await Promise.allSettled(taskDefs.map(([, run]) => run()));
     const value = index => tasks[index].status === 'fulfilled' ? tasks[index].value : null;
     const notices = [];
     if (value(0)?.result) notices.push(...lifecycleNotices('tomcat', 'Apache Tomcat', value(0).result.releases, ['11.0','10.1','10.0','9.0','8.5','8.0','7']));
@@ -148,7 +150,14 @@ module.exports = async function handler(request, response) {
     if (value(4)) notices.push(...tomcatSecurityNotices('11.0', value(4)));
     if (value(5)) notices.push(...postgresNotices(value(5)));
     if (value(6)) notices.push(...tmaxNotices(value(6)));
-    response.status(200).json({ generatedAt: new Date().toISOString(), notices });
+    const sourceStatuses = tasks.map((task, index) => ({
+      name: taskDefs[index][0],
+      status: task.status === 'fulfilled' ? '정상' : '실패',
+      checkedAt: new Date().toISOString(),
+      message: task.status === 'fulfilled' ? '수집 완료' : String(task.reason?.message || '연결 실패').slice(0, 160),
+      elapsedMs: Date.now() - startedAt,
+    }));
+    response.status(200).json({ generatedAt: new Date().toISOString(), notices, sourceStatuses });
   } catch (error) {
     response.status(500).json({ error: '공지 정보를 불러오지 못했습니다.' });
   }
