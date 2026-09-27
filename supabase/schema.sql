@@ -77,6 +77,8 @@ create table if not exists public.notice_actions (
   acknowledged_email text not null,
   acknowledged_role text not null check (acknowledged_role in ('admin','viewer')),
   acknowledged_at timestamptz not null default now(),
+  plan_start_date date,
+  plan_end_date date,
   next_action_date date not null,
   action_status text not null default '검토 필요' check (action_status in ('검토 필요','계획 수립','대응 중','완료')),
   updated_at timestamptz not null default now()
