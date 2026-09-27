@@ -79,26 +79,26 @@ function tomcatSecurityNotices(version, html) {
 function postgresNotices(html) {
   const text = strip(html);
   const ids = [...new Set(text.match(/CVE-[0-9]{4}-[0-9]+/g) || [])].slice(0, 10);
-  return ids.map(id => ({
-    id: `postgresql-${id}`,
+  return ids.flatMap(id => ['18','17','16','15','14'].map(version => ({
+    id: `postgresql-${version}-${id}`,
     product: 'PostgreSQL',
-    version: '지원 버전',
+    version,
     type: '보안 패치',
     severity: 'high',
-    title: `${id} PostgreSQL 보안 권고`,
-    summary: '영향 버전과 수정 버전을 공식 보안 공지에서 확인하세요.',
-    detail: `${id} PostgreSQL 보안 권고입니다. 사용 중인 PostgreSQL 주 버전이 영향 범위에 포함되는지 확인하고, 공급사가 제시한 수정 마이너 버전으로 업데이트한 뒤 관련 기능을 점검하세요.`,
+    title: `${id} · PostgreSQL ${version} 보안 권고`,
+    summary: `PostgreSQL ${version} 영향 여부와 수정 패치 버전을 확인하세요.`,
+    detail: `${id} PostgreSQL ${version} 보안 권고입니다. 설치된 ${version}.x 버전이 영향 범위에 포함되는지 확인하고, 공급사가 제시한 수정 마이너 버전으로 업데이트한 뒤 관련 기능을 점검하세요.`,
     publishedAt: null,
     fixedVersion: null,
     url: SOURCES.postgres,
     source: 'PostgreSQL Security',
-  }));
+  })));
 }
 
 function tmaxNotices(html) {
   const matches = [...html.matchAll(/<tr[^>]*onclick\s*=\s*["'][^"']*fnView\s*\(\s*["']\.\/view["']\s*,\s*["']([0-9]+)["']\s*\)[^"']*["'][^>]*>([\s\S]*?)<\/tr>/gi)];
   const seen = new Set();
-  return matches.map(([, seq, body], index) => {
+  return matches.flatMap(([, seq, body], index) => {
     const titleMatch = body.match(/<div[^>]*class=["'][^"']*text-clamp-1[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
     const dateMatch = body.match(/([0-9]{4})\.([0-9]{2})\.([0-9]{2})/);
     const title = strip(titleMatch?.[1] || body);
@@ -106,20 +106,23 @@ function tmaxNotices(html) {
     const key = title.toLowerCase();
     if (seen.has(key)) return null;
     seen.add(key);
-    return {
-      id: `tmax-${index}-${Buffer.from(title).toString('base64url').slice(0, 16)}`,
-      product: /webtob|웹투비/i.test(title) ? 'WebtoB' : 'JEUS',
-      version: /webtob|웹투비/i.test(title) ? '5' : '7 / 8 / 9',
+    const isWebtoB = /webtob|웹투비/i.test(title);
+    const mentionedJeusVersion = title.match(/JEUS\s*([789])\b/i)?.[1];
+    const versions = isWebtoB ? ['5'] : mentionedJeusVersion ? [mentionedJeusVersion] : ['7','8','9'];
+    return versions.map(version => ({
+      id: `tmax-${version}-${index}-${Buffer.from(title).toString('base64url').slice(0, 16)}`,
+      product: isWebtoB ? 'WebtoB' : 'JEUS',
+      version,
       type: /eol|eos/i.test(title) ? 'EOS' : '보안 패치',
       severity: /긴급|critical|중요/i.test(title) ? 'critical' : 'high',
-      title,
-      summary: 'TmaxSoft 공식 공지의 영향 버전과 패치 절차를 확인하세요.',
-      detail: `${title}. 운영 중인 ${/webtob|웹투비/i.test(title) ? 'WebtoB 5' : 'JEUS 7/8/9'} 버전의 영향 여부를 확인하고 TmaxSoft가 제공하는 패치 또는 권고 설정을 검증계에 적용한 후 운영 반영 일정을 수립하세요.`,
+      title: `${title} · ${isWebtoB ? 'WebtoB' : 'JEUS'} ${version}`,
+      summary: `${isWebtoB ? 'WebtoB' : 'JEUS'} ${version}의 영향 여부와 패치 절차를 확인하세요.`,
+      detail: `${title}. 운영 중인 ${isWebtoB ? 'WebtoB' : 'JEUS'} ${version} 버전의 영향 여부를 확인하고 TmaxSoft가 제공하는 패치 또는 권고 설정을 검증계에 적용한 후 운영 반영 일정을 수립하세요.`,
       publishedAt: dateMatch ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}` : null,
       fixedVersion: null,
       url: `https://www.tmaxsoft.com/kr/developer/notice/view?seq=${seq}`,
       source: 'TmaxSoft 공지',
-    };
+    }));
   }).filter(Boolean).slice(0, 12);
 }
 
