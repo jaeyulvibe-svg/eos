@@ -23,8 +23,17 @@ create table if not exists public.aa_managed_software (
   unique(master_id, environment)
 );
 
+create table if not exists public.skipped_notices (
+  id uuid primary key default gen_random_uuid(),
+  notice_id text not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  skipped_at timestamptz not null default now(),
+  unique(notice_id, user_id)
+);
+
 alter table public.software_master enable row level security;
 alter table public.aa_managed_software enable row level security;
+alter table public.skipped_notices enable row level security;
 
 drop policy if exists "authenticated users read software master" on public.software_master;
 drop policy if exists "admin manages software master" on public.software_master;
@@ -43,6 +52,12 @@ create policy "admin manages managed software" on public.aa_managed_software
   for all to authenticated
   using ((auth.jwt() ->> 'email') = 'admin@opswatch.local')
   with check ((auth.jwt() ->> 'email') = 'admin@opswatch.local');
+
+drop policy if exists "users manage own skipped notices" on public.skipped_notices;
+create policy "users manage own skipped notices" on public.skipped_notices
+  for all to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
 
 insert into public.software_master(product, version, lifecycle_slug, lifecycle_url, security_url)
 values
