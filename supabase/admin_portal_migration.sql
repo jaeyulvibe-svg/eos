@@ -86,3 +86,9 @@ on conflict(product, version) do update set
   enabled=true,
   updated_at=now();
 
+insert into public.aa_managed_software(master_id, environment, memo)
+select id, '운영', '기본 운영 대상'
+from public.software_master
+where (product, version) in (('JEUS','7'),('JEUS','8'),('JEUS','9'),('WebtoB','5'))
+on conflict(master_id, environment) do update set enabled=true, updated_at=now();
+
