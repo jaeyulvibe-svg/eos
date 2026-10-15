@@ -38,7 +38,7 @@ function lifecycleNotices(product, label, releases, allowedVersions) {
       : `${label} ${release.name} EOS ${release.eolFrom || '미정'}`,
     summary: `최신 패치 ${release.latest?.name || '미확인'} · EOS ${release.eolFrom || '미정'}`,
     detail: `${label} ${release.name} 버전의 최신 패치는 ${release.latest?.name || '미확인'}이며 지원 종료일은 ${release.eolFrom || '아직 발표되지 않음'}입니다. 운영 중인 설치 버전과 최신 패치를 비교하고, 지원 종료 전 상위 버전 전환·호환성 검증·운영 반영 일정을 수립하세요.`,
-    publishedAt: release.eolFrom || release.latest?.date || null,
+    publishedAt: null,
     eosDate: release.eolFrom || null,
     fixedVersion: release.latest?.name || null,
     url: `https://endoflife.date/${product}`,
@@ -71,6 +71,15 @@ function tomcatSecurityNotices(version, html) {
     const issueMatcher = new RegExp(issue.source, 'gi');
     while ((found = issueMatcher.exec(body)) && notices.length < 12) {
       const severity = found[1].toLowerCase();
+      const remaining = body.slice(issueMatcher.lastIndex);
+      const nextIssue = remaining.search(/(?:Critical|Important|Moderate|Low):\s+/i);
+      const issueBody = (nextIssue >= 0 ? remaining.slice(0, nextIssue) : remaining).trim();
+      const affects = issueBody.match(/Affects:\s*([^]*?)(?=(?:Critical|Important|Moderate|Low):|$)/i)?.[1]?.trim();
+      const description = issueBody
+        .replace(/This was fixed with commits?[\s\S]*?(?=(?:This issue|Affects:|$))/i, ' ')
+        .replace(/This issue was[\s\S]*?(?=(?:Affects:|$))/i, ' ')
+        .replace(/Affects:[\s\S]*$/i, ' ')
+        .replace(/\s+/g, ' ').trim();
       notices.push({
         id: `tomcat-${version}-${found[3]}`,
         product: 'Apache Tomcat',
@@ -79,7 +88,7 @@ function tomcatSecurityNotices(version, html) {
         severity: severity === 'critical' ? 'critical' : severity === 'important' ? 'high' : severity,
         title: `${found[3]} · ${found[2].trim()}`,
         summary: `${fixedVersion} 이상으로 업데이트 필요`,
-        detail: `${found[3]} 취약점이 Apache Tomcat ${version} 계열에 공지되었습니다. 위험도는 ${found[1]}이며 ${fixedVersion} 이상 버전으로 업데이트해야 합니다. 적용 전 변경 내역과 애플리케이션 호환성을 검토하고 검증계를 거쳐 운영에 반영하세요.`,
+        detail: `패치 항목: ${found[2].trim()}\n\n취약점 상세: ${description || 'Apache Tomcat 공식 보안 공지에서 상세 내용을 확인하세요.'}\n\n영향 버전: ${affects || `${version} 계열의 공식 영향 범위 확인 필요`}\n수정 버전: Apache Tomcat ${fixedVersion}\n위험도: ${found[1]}\n\n권고 조치: 현재 설치 버전이 영향 범위에 포함되는지 확인하고 ${fixedVersion} 이상으로 업데이트하세요. 적용 전 변경 내역과 애플리케이션 호환성을 검토한 뒤 검증계를 거쳐 운영에 반영하세요.`,
         publishedAt: date,
         fixedVersion,
         url: `https://tomcat.apache.org/security-${version.split('.')[0]}.html`,
