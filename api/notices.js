@@ -3,6 +3,16 @@ const SOURCES = {
   postgres: 'https://www.postgresql.org/support/security/',
 };
 
+const LIFECYCLE_ANNOUNCEMENTS = {
+  tomcat: {
+    '10.0': { date: '2022-10-31', label: 'EOS 발표일', url: 'https://tomcat.apache.org/tomcat-10.0-eol.html', source: 'Apache Tomcat 공식 EOS 공지' },
+    '9.0': { date: '2026-02-11', label: 'EOS 발표일', url: 'https://tomcat.apache.org/tomcat-9.0.x-eos', source: 'Apache Tomcat 공식 EOS 공지' },
+    '8.5': { date: '2023-08-14', label: 'EOS 발표일', url: 'https://tomcat.apache.org/oldnews-2023.html', source: 'Apache Tomcat 공식 뉴스' },
+    '8.0': { date: '2018-04-07', label: 'EOS 발표일', url: 'https://tomcat.apache.org/oldnews-2018.html', source: 'Apache Tomcat 공식 뉴스' },
+    '7': { date: '2020-09-20', label: 'EOS 발표일', url: 'https://tomcat.apache.org/oldnews-2020.html', source: 'Apache Tomcat 공식 뉴스' },
+  },
+};
+
 const strip = value => value
   .replace(/<script[\s\S]*?<\/script>/gi, ' ')
   .replace(/<style[\s\S]*?<\/style>/gi, ' ')
@@ -27,7 +37,16 @@ async function getText(url) {
 }
 
 function lifecycleNotices(product, label, releases, allowedVersions) {
-  return releases.filter(release => allowedVersions.includes(release.name)).map(release => ({
+  return releases.filter(release => allowedVersions.includes(release.name)).map(release => {
+    const official = LIFECYCLE_ANNOUNCEMENTS[product]?.[release.name];
+    const policyBasis = product === 'postgresql' && release.releaseDate ? {
+      date: release.releaseDate,
+      label: '지원정책 기준일',
+      url: 'https://www.postgresql.org/support/versioning/',
+      source: 'PostgreSQL 공식 버전 정책',
+    } : null;
+    const announcement = official || policyBasis;
+    return ({
     id: `eos-${product}-${release.name}`,
     product: label,
     version: release.name,
@@ -37,13 +56,16 @@ function lifecycleNotices(product, label, releases, allowedVersions) {
       ? `${label} ${release.name} 지원 종료`
       : `${label} ${release.name} EOS ${release.eolFrom || '미정'}`,
     summary: `최신 패치 ${release.latest?.name || '미확인'} · EOS ${release.eolFrom || '미정'}`,
-    detail: `${label} ${release.name} 버전의 최신 패치는 ${release.latest?.name || '미확인'}이며 지원 종료일은 ${release.eolFrom || '아직 발표되지 않음'}입니다. 운영 중인 설치 버전과 최신 패치를 비교하고, 지원 종료 전 상위 버전 전환·호환성 검증·운영 반영 일정을 수립하세요.`,
-    publishedAt: null,
+    detail: `${label} ${release.name} 버전의 최신 패치는 ${release.latest?.name || '미확인'}이며 지원 종료일은 ${release.eolFrom || '아직 발표되지 않음'}입니다.${announcement ? ` ${announcement.label}은 ${announcement.date}이며 ${announcement.source}에서 확인했습니다.` : ' 제조사의 별도 EOS 발표일은 아직 확인되지 않았습니다.'} 운영 중인 설치 버전과 최신 패치를 비교하고, 지원 종료 전 상위 버전 전환·호환성 검증·운영 반영 일정을 수립하세요.`,
+    publishedAt: announcement?.date || null,
+    announcementLabel: announcement?.label || 'EOS 발표일',
+    announcementUrl: announcement?.url || null,
     eosDate: release.eolFrom || null,
     fixedVersion: release.latest?.name || null,
-    url: `https://endoflife.date/${product}`,
-    source: 'endoflife.date',
-  }));
+    url: announcement?.url || `https://endoflife.date/${product}`,
+    source: announcement?.source || 'endoflife.date',
+  });
+  });
 }
 
 function latestPatchNotices(product, label, releases, allowedVersions) {
