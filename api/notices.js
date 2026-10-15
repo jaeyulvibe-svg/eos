@@ -46,6 +46,19 @@ function lifecycleNotices(product, label, releases, allowedVersions) {
   }));
 }
 
+function latestPatchNotices(product, label, releases, allowedVersions) {
+  return releases.filter(release => allowedVersions.includes(release.name) && release.latest?.name).map(release => ({
+    id: `latest-${product}-${release.name}-${release.latest.name}`,
+    product: label, version: release.name, type: '최신 패치', severity: 'info',
+    title: `${label} ${release.name} 최신 패치 ${release.latest.name}`,
+    summary: `${release.latest?.date || '최근'} 공개 · 현재 운영 버전과 비교해 업데이트 필요 여부를 검토하세요.`,
+    detail: `${label} ${release.name} 계열의 최신 공개 패치는 ${release.latest.name}입니다. 현재 설치된 패치 버전과 비교하고, 변경 사항과 호환성을 검증한 뒤 운영 반영 여부를 결정하세요.`,
+    publishedAt: release.latest?.date || null, fixedVersion: release.latest.name,
+    url: product === 'tomcat' ? `https://tomcat.apache.org/download-${release.name.split('.')[0]}.cgi` : `https://www.postgresql.org/docs/release/`,
+    source: 'endoflife.date',
+  }));
+}
+
 function tomcatSecurityNotices(version, html) {
   const text = strip(html);
   const section = /([0-9]{4}-[0-9]{2}-[0-9]{2})\s+Fixed in Apache Tomcat\s+([^\s]+)([\s\S]*?)(?=[0-9]{4}-[0-9]{2}-[0-9]{2}\s+Fixed in Apache Tomcat|$)/g;
@@ -140,24 +153,41 @@ module.exports = async function handler(request, response) {
       ['PostgreSQL Security', () => getText(SOURCES.postgres)],
       ['TmaxSoft JEUS·WebtoB', () => getText(SOURCES.tmax)],
     ];
+    const sourceMeta = [
+      { url: 'https://endoflife.date/tomcat', dataType: 'EOS · 최신 패치 버전', product: 'Apache Tomcat' },
+      { url: 'https://endoflife.date/postgresql', dataType: 'EOS · 최신 패치 버전', product: 'PostgreSQL' },
+      { url: 'https://tomcat.apache.org/security-9.html', dataType: '9.x 보안 취약점 · 수정 버전', product: 'Apache Tomcat', version: '9.0' },
+      { url: 'https://tomcat.apache.org/security-10.html', dataType: '10.x 보안 취약점 · 수정 버전', product: 'Apache Tomcat', version: '10.1' },
+      { url: 'https://tomcat.apache.org/security-11.html', dataType: '11.x 보안 취약점 · 수정 버전', product: 'Apache Tomcat', version: '11.0' },
+      { url: SOURCES.postgres, dataType: '보안 취약점 · CVE', product: 'PostgreSQL' },
+      { url: SOURCES.tmax, dataType: 'JEUS · WebtoB 보안/패치/EOS 공지', product: 'JEUS · WebtoB' },
+    ];
     const startedAt = Date.now();
     const tasks = await Promise.allSettled(taskDefs.map(([, run]) => run()));
     const value = index => tasks[index].status === 'fulfilled' ? tasks[index].value : null;
     const notices = [];
-    if (value(0)?.result) notices.push(...lifecycleNotices('tomcat', 'Apache Tomcat', value(0).result.releases, ['11.0','10.1','10.0','9.0','8.5','8.0','7']));
-    if (value(1)?.result) notices.push(...lifecycleNotices('postgresql', 'PostgreSQL', value(1).result.releases, ['18','17','16','15','14','13','12']));
+    if (value(0)?.result) { notices.push(...lifecycleNotices('tomcat', 'Apache Tomcat', value(0).result.releases, ['11.0','10.1','10.0','9.0','8.5','8.0','7'])); notices.push(...latestPatchNotices('tomcat', 'Apache Tomcat', value(0).result.releases, ['11.0','10.1','10.0','9.0','8.5','8.0','7'])); }
+    if (value(1)?.result) { notices.push(...lifecycleNotices('postgresql', 'PostgreSQL', value(1).result.releases, ['18','17','16','15','14','13','12'])); notices.push(...latestPatchNotices('postgresql', 'PostgreSQL', value(1).result.releases, ['18','17','16','15','14','13','12'])); }
     if (value(2)) notices.push(...tomcatSecurityNotices('9.0', value(2)));
     if (value(3)) notices.push(...tomcatSecurityNotices('10.1', value(3)));
     if (value(4)) notices.push(...tomcatSecurityNotices('11.0', value(4)));
     if (value(5)) notices.push(...postgresNotices(value(5)));
     if (value(6)) notices.push(...tmaxNotices(value(6)));
-    const sourceStatuses = tasks.map((task, index) => ({
-      name: taskDefs[index][0],
-      status: task.status === 'fulfilled' ? '정상' : '실패',
-      checkedAt: new Date().toISOString(),
-      message: task.status === 'fulfilled' ? '수집 완료' : String(task.reason?.message || '연결 실패').slice(0, 160),
-      elapsedMs: Date.now() - startedAt,
-    }));
+    const sourceStatuses = tasks.map((task, index) => {
+      const meta = sourceMeta[index];
+      const matched = notices.filter(n => index === 0 ? n.product === 'Apache Tomcat' && ['EOS','최신 패치'].includes(n.type)
+        : index === 1 ? n.product === 'PostgreSQL' && ['EOS','최신 패치'].includes(n.type)
+        : index >= 2 && index <= 4 ? n.product === 'Apache Tomcat' && n.type === '보안 패치' && n.version === meta.version
+        : index === 5 ? n.product === 'PostgreSQL' && n.type === '보안 패치'
+        : ['JEUS','WebtoB'].includes(n.product));
+      const latestPatch = matched.map(n => n.fixedVersion).filter(Boolean).sort((a,b) => b.localeCompare(a, undefined, { numeric: true }))[0] || null;
+      return {
+        name: taskDefs[index][0], url: meta.url, dataType: meta.dataType, product: meta.product,
+        status: task.status === 'fulfilled' ? '정상' : '실패', checkedAt: new Date().toISOString(),
+        message: task.status === 'fulfilled' ? `${matched.length}건 수집${latestPatch ? ` · 최신 수정 ${latestPatch}` : ''}` : String(task.reason?.message || '연결 실패').slice(0, 160),
+        itemCount: matched.length, latestPatch, elapsedMs: Date.now() - startedAt,
+      };
+    });
     response.status(200).json({ generatedAt: new Date().toISOString(), notices, sourceStatuses });
   } catch (error) {
     response.status(500).json({ error: '공지 정보를 불러오지 못했습니다.' });
