@@ -9,6 +9,8 @@ async function json(url, options = {}) {
 }
 
 module.exports = async function handler(request, response) {
+  response.setHeader('Cache-Control', 'private, no-store, max-age=0');
+  response.setHeader('Vary', 'Authorization');
   response.setHeader('Cache-Control', 'no-store');
   const token = String(request.headers.authorization || '').replace(/^Bearer\s+/i, '');
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -20,7 +22,7 @@ module.exports = async function handler(request, response) {
     const headers = { apikey: serviceKey, authorization: `Bearer ${serviceKey}`, 'content-type': 'application/json' };
     if (request.method === 'GET') {
       const result = await json(`${URL}/auth/v1/admin/users?page=1&per_page=200`, { headers });
-      return response.status(200).json({ users: (result.users || []).map(user => ({ id: user.id, email: user.email, username: user.email?.split('@')[0], role: user.app_metadata?.role || (user.email === 'admin@opswatch.local' ? 'admin' : 'viewer'), created_at: user.created_at, last_sign_in_at: user.last_sign_in_at })) });
+      return response.status(200).json({ users: (result.users || []).map(user => ({ id: user.id, email: user.email, username: user.email?.split('@')[0], app_metadata: { role: user.app_metadata?.role || (user.email === 'admin@opswatch.local' ? 'admin' : 'viewer') }, created_at: user.created_at, last_sign_in_at: user.last_sign_in_at })) });
     }
     const body = request.body || {};
     if (request.method === 'POST') {
