@@ -173,8 +173,9 @@ function tmaxNotices(html) {
 
 module.exports = async function handler(request, response) {
   response.setHeader('Access-Control-Allow-Origin', '*');
+  const isDailyRefresh = /[?&]refresh=daily(?:&|$)/.test(request.url || '');
   const forceRefresh = /[?&](?:refresh|health)=/.test(request.url || '');
-  response.setHeader('Cache-Control', forceRefresh ? 'no-store, max-age=0' : 's-maxage=900, stale-while-revalidate=3600');
+  response.setHeader('Cache-Control', isDailyRefresh ? 's-maxage=82800' : forceRefresh ? 'no-store, max-age=0' : 's-maxage=900, stale-while-revalidate=3600');
   try {
     const taskDefs = [
       ['endoflife.date · Tomcat EOS', () => getJson('https://endoflife.date/api/v1/products/tomcat/')],
