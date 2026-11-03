@@ -3,5 +3,11 @@
   "cleanUrls": true,
   "functions": {
     "api/notices.js": { "maxDuration": 30 }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/notices?refresh=daily",
+      "schedule": "0 23 * * *"
+    }
+  ]
 }
