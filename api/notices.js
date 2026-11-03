@@ -24,6 +24,12 @@ const strip = value => value
   .replace(/\s+/g, ' ')
   .trim();
 
+function latestDailyUpdateAt() {
+  const kstNow = new Date(Date.now() + (9 * 60 * 60 * 1000));
+  if (kstNow.getUTCHours() < 8) kstNow.setUTCDate(kstNow.getUTCDate() - 1);
+  return new Date(Date.UTC(kstNow.getUTCFullYear(), kstNow.getUTCMonth(), kstNow.getUTCDate(), -1, 0, 0)).toISOString();
+}
+
 async function getJson(url) {
   const response = await fetch(url, { headers: { 'user-agent': 'OpsWatch/1.0' }, signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw new Error(`${response.status} ${url}`);
@@ -221,7 +227,7 @@ module.exports = async function handler(request, response) {
         itemCount: matched.length, latestPatch, elapsedMs: Date.now() - startedAt,
       };
     });
-    response.status(200).json({ generatedAt: new Date().toISOString(), notices, sourceStatuses });
+    response.status(200).json({ generatedAt: isDailyRefresh ? latestDailyUpdateAt() : new Date().toISOString(), notices, sourceStatuses });
   } catch (error) {
     response.status(500).json({ error: '공지 정보를 불러오지 못했습니다.' });
   }
