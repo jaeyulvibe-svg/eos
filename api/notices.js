@@ -1,6 +1,7 @@
 const SOURCES = {
   tmax: 'https://www.tmaxsoft.com/kr/developer/notice/list',
   postgres: 'https://www.postgresql.org/support/security/',
+  kisa: 'https://www.boho.or.kr/kr/bbs/list.do?bbsId=B0000133&menuNo=205020',
 };
 
 const LIFECYCLE_ANNOUNCEMENTS = {
@@ -177,6 +178,33 @@ function tmaxNotices(html) {
   }).filter(Boolean).slice(0, 12);
 }
 
+function kisaSecurityNotices(html) {
+  const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)];
+  return rows.flatMap(([, body]) => {
+    const link = body.match(/<a[^>]+href=["']([^"']*nttId=([0-9]+)[^"']*)["'][^>]*>([\s\S]*?)<\/a>/i);
+    const date = body.match(/<td[^>]*class=["'][^"']*date[^"']*["'][^>]*>\s*([0-9]{4}-[0-9]{2}-[0-9]{2})\s*<\/td>/i)?.[1];
+    if (!link || !date) return [];
+    const title = strip(link[3]);
+    if (!title) return [];
+    const url = new URL(link[1].replace(/&amp;/g, '&'), 'https://www.boho.or.kr').href;
+    const severity = /(긴급|취약점|원격|공격|랜섬웨어|침해)/i.test(title) ? 'high' : 'moderate';
+    return [{
+      id: `kisa-${link[2]}`,
+      product: 'KISA',
+      version: '보호나라 보안공지',
+      type: '보안 패치',
+      severity,
+      title,
+      summary: 'KISA 보호나라·KrCERT/CC에서 배포한 보안 권고입니다.',
+      detail: `${title}\n\nKISA 보호나라·KrCERT/CC가 ${date}에 게시한 보안공지입니다. 영향받는 제품과 버전, 해결 방안은 KISA 공식 상세 공지에서 확인하고 운영 환경의 적용 여부를 검토하세요.`,
+      publishedAt: date,
+      fixedVersion: null,
+      url,
+      source: 'KISA 보호나라·KrCERT/CC',
+    }];
+  }).filter((notice, index, all) => all.findIndex(item => item.id === notice.id) === index).slice(0, 20);
+}
+
 module.exports = async function handler(request, response) {
   response.setHeader('Access-Control-Allow-Origin', '*');
   const isDailyRefresh = /[?&]refresh=daily(?:&|$)/.test(request.url || '');
@@ -191,6 +219,7 @@ module.exports = async function handler(request, response) {
       ['Apache Tomcat 11 Security', () => getText('https://tomcat.apache.org/security-11.html')],
       ['PostgreSQL Security', () => getText(SOURCES.postgres)],
       ['TmaxSoft JEUS·WebtoB', () => getText(SOURCES.tmax)],
+      ['KISA 보호나라 보안공지', () => getText(SOURCES.kisa)],
     ];
     const sourceMeta = [
       { url: 'https://endoflife.date/tomcat', dataType: 'EOS · 최신 패치 버전', product: 'Apache Tomcat' },
@@ -200,6 +229,7 @@ module.exports = async function handler(request, response) {
       { url: 'https://tomcat.apache.org/security-11.html', dataType: '11.x 보안 취약점 · 수정 버전', product: 'Apache Tomcat', version: '11.0' },
       { url: SOURCES.postgres, dataType: '보안 취약점 · CVE', product: 'PostgreSQL' },
       { url: SOURCES.tmax, dataType: 'JEUS · WebtoB 보안/패치/EOS 공지', product: 'JEUS · WebtoB' },
+      { url: SOURCES.kisa, dataType: '국내외 제품 보안 업데이트 · 취약점 권고', product: 'KISA' },
     ];
     const startedAt = Date.now();
     const tasks = await Promise.allSettled(taskDefs.map(([, run]) => run()));
@@ -212,13 +242,16 @@ module.exports = async function handler(request, response) {
     if (value(4)) notices.push(...tomcatSecurityNotices('11.0', value(4)));
     if (value(5)) notices.push(...postgresNotices(value(5)));
     if (value(6)) notices.push(...tmaxNotices(value(6)));
+    const kisaNotices = value(7) ? kisaSecurityNotices(value(7)) : [];
     const sourceStatuses = tasks.map((task, index) => {
       const meta = sourceMeta[index];
       const matched = notices.filter(n => index === 0 ? n.product === 'Apache Tomcat' && ['EOS','최신 패치'].includes(n.type)
         : index === 1 ? n.product === 'PostgreSQL' && ['EOS','최신 패치'].includes(n.type)
         : index >= 2 && index <= 4 ? n.product === 'Apache Tomcat' && n.type === '보안 패치' && n.version === meta.version
         : index === 5 ? n.product === 'PostgreSQL' && n.type === '보안 패치'
-        : ['JEUS','WebtoB'].includes(n.product));
+        : index === 6 ? ['JEUS','WebtoB'].includes(n.product)
+        : false);
+      if (index === 7) matched.push(...kisaNotices);
       const latestPatch = matched.map(n => n.fixedVersion).filter(Boolean).sort((a,b) => b.localeCompare(a, undefined, { numeric: true }))[0] || null;
       return {
         name: taskDefs[index][0], url: meta.url, dataType: meta.dataType, product: meta.product,
@@ -227,7 +260,7 @@ module.exports = async function handler(request, response) {
         itemCount: matched.length, latestPatch, elapsedMs: Date.now() - startedAt,
       };
     });
-    response.status(200).json({ generatedAt: isDailyRefresh ? latestDailyUpdateAt() : new Date().toISOString(), notices, sourceStatuses });
+    response.status(200).json({ generatedAt: isDailyRefresh ? latestDailyUpdateAt() : new Date().toISOString(), notices, kisaNotices, sourceStatuses });
   } catch (error) {
     response.status(500).json({ error: '공지 정보를 불러오지 못했습니다.' });
   }
